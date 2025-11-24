@@ -1,0 +1,33 @@
+export type MemeReactions = {
+  likes: number;
+  laughs: number;
+  wows: number;
+  sads: number;
+  dislikes: number;
+};
+
+export type UIMeme = {
+  _id: string;
+  title: string;
+  description?: string;
+  imageUrl: string;
+  mediaType?: "image" | "video";
+  category: string;
+  tags?: string[];
+  ownerId?: string;
+  ownerName?: string;
+  reactions: MemeReactions;
+  downloads?: number;
+  shares?: number;
+  views?: number;
+  createdAt?: string;
+};
+
+export const emptyReactions: MemeReactions = {
+  likes: 0,
+  laughs: 0,
+  wows: 0,
+  sads: 0,
+  dislikes: 0,
+};
+
