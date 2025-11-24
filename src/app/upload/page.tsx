@@ -12,12 +12,12 @@ export default function Upload() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [tags, setTags] = useState("");
-  const [file, setFile] = (useState < File) | (null > null);
+  const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
 
   if (status === "loading") return <p>Loading...</p>;
   if (!session) {
-    router.push("/api/auth/signin");
+    router.push("/auth");
     return null;
   }
 
