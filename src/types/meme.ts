@@ -11,12 +11,18 @@ export type UIMeme = {
   title: string;
   description?: string;
   imageUrl: string;
+  memeUrl?: string;
+  videoUrl?: string;
+  cloudinaryPublicId?: string;
+  cloudinaryResourceType?: "image" | "video";
   mediaType?: "image" | "video";
   category: string;
   tags?: string[];
   ownerId?: string;
   ownerName?: string;
   reactions: MemeReactions;
+  likedBy?: string[];
+  isLiked?: boolean;
   downloads?: number;
   shares?: number;
   views?: number;

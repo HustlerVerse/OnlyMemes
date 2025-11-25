@@ -1,48 +1,65 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { MemeCard } from "@/components/MemeCard";
 import type { UIMeme } from "@/types/meme";
-import { placeholderMemes } from "@/data/placeholders";
-import { Trophy } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 
 export default function Trending() {
-  const [memes, setMemes] = useState<UIMeme[]>(placeholderMemes);
+  const [memes, setMemes] = useState<UIMeme[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/memes/trending")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length) {
-          setMemes(data);
-        }
-      })
-      .catch(() => setMemes(placeholderMemes));
+    fetchTrendingMemes();
   }, []);
 
+  const fetchTrendingMemes = async () => {
+    try {
+      const res = await fetch("/api/memes/trending");
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setMemes(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch trending memes", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="max-w-7xl mx-auto p-4"
-    >
-      <div className="mb-10 flex flex-col gap-4 text-center">
-        <Trophy className="mx-auto h-12 w-12 text-primary" />
-        <h1 className="text-4xl font-bold">Trending Memes</h1>
-        <p className="text-slate-400">
-          Real-time leaderboard of the hottest memes on OnlyMemes.
-        </p>
-      </div>
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {memes.slice(0, 8).map((meme, index) => (
-          <MemeCard
-            key={`${meme._id}-${index}`}
-            meme={meme}
-            featuredBadge={`#${index + 1} Trending`}
-          />
-        ))}
-      </div>
-    </motion.div>
+    <div className="min-h-screen flex flex-col bg-background">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12">
+        <div className="flex items-center gap-3 mb-8">
+          <TrendingUp className="h-10 w-10 text-primary" />
+          <h1 className="text-4xl font-bold text-foreground">Trending Memes</h1>
+        </div>
+
+        {isLoading ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Loading trending memes...</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {memes.map((meme, index) => (
+                <MemeCard
+                  key={meme._id}
+                  meme={meme}
+                  featuredBadge={index < 3 ? `#${index + 1} Trending` : undefined}
+                />
+              ))}
+            </div>
+            {memes.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">
+                  No trending memes yet. Be the first to upload!
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </main>
+    </div>
   );
 }

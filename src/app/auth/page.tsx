@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 
@@ -10,7 +10,7 @@ const tabs = [
   { key: "signup", label: "Sign Up" },
 ];
 
-export default function AuthPage() {
+function AuthPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [mode, setMode] = useState(searchParams.get("mode") ?? "login");
@@ -197,5 +197,17 @@ export default function AuthPage() {
         <div className="mt-8">{renderForm()}</div>
       </motion.div>
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[calc(100vh-120px)] flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    }>
+      <AuthPageContent />
+    </Suspense>
   );
 }
