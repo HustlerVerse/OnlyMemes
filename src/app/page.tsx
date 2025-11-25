@@ -23,7 +23,9 @@ export default function Home() {
   const trendingMemes = useAppSelector(selectTrendingMemes);
   const allMemes = useAppSelector(selectAllMemes);
   const groupedByCategory = useAppSelector(selectMemesGroupedByCategory);
-  const [featuredTemplates, setFeaturedTemplates] = useState<TemplateCardData[]>([]);
+  const [featuredTemplates, setFeaturedTemplates] = useState<
+    TemplateCardData[]
+  >([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
 
   useEffect(() => {
@@ -130,7 +132,7 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="mt-12 grid gap-4 text-left md:grid-cols-3">
+        <div className="mt-12 grid  gap-4 text-left md:grid-cols-3">
           {highlights.map(({ label, value, icon: Icon }) => (
             <div
               key={label}
@@ -164,9 +166,11 @@ export default function Home() {
           </Link>
         </div>
         {status === "loading" ? (
-          <p className="text-center text-slate-400">Loading trending memes...</p>
+          <p className="text-center text-slate-400">
+            Loading trending memes...
+          </p>
         ) : trendingMemes.length ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {trendingMemes.map((meme, idx) => (
               <MemeCard
                 key={`${meme._id}-${idx}`}
@@ -195,7 +199,7 @@ export default function Home() {
         {status === "loading" ? (
           <p className="text-center text-slate-400">Fetching latest memes...</p>
         ) : latestMemes.length ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {latestMemes.map((meme, idx) => (
               <MemeCard
                 key={`${meme._id}-latest-${idx}`}
@@ -241,7 +245,7 @@ export default function Home() {
                     See all
                   </Link>
                 </div>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {memes.slice(0, 4).map((meme) => (
                     <MemeCard key={meme._id} meme={meme} />
                   ))}
@@ -269,7 +273,9 @@ export default function Home() {
                   Browse templates & craft your story
                 </h3>
                 <p className="text-slate-400 max-w-2xl">
-                  Kickstart your next meme with community favorite templates. Tap a card to jump into the uploader with the template ready to go.
+                  Kickstart your next meme with community favorite templates.
+                  Tap a card to jump into the uploader with the template ready
+                  to go.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -314,7 +320,9 @@ export default function Home() {
                       </div>
                       <div className="p-4 flex items-center justify-between gap-3">
                         <div>
-                          <p className="text-white font-semibold">{template.name}</p>
+                          <p className="text-white font-semibold">
+                            {template.name}
+                          </p>
                           <p className="text-xs text-slate-400 uppercase tracking-wide">
                             {template.category}
                           </p>
@@ -331,7 +339,8 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="text-center py-12 text-slate-400">
-                  No templates yet. Head over to the templates page to add the first one!
+                  No templates yet. Head over to the templates page to add the
+                  first one!
                 </div>
               )}
             </div>

@@ -1,159 +1,223 @@
 "use client";
 
-import { useState } from "react";
+import { useState, MouseEvent } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { ThumbsUp } from "lucide-react";
+import { ThumbsUp, Laugh, Eye, Frown, ThumbsDown } from "lucide-react";
 import type { UIMeme } from "@/types/meme";
+
+type ReactionKey = "likes" | "laughs" | "wows" | "sads" | "dislikes";
 
 interface Props {
   meme: UIMeme;
   showEditDelete?: boolean;
   featuredBadge?: string;
-  onReactionUpdate?: (memeId: string, reactions: UIMeme["reactions"], isLiked: boolean) => void;
+  onReactionUpdate?: (
+    memeId: string,
+    reactions: UIMeme["reactions"],
+    activeReaction: ReactionKey | null
+  ) => void;
 }
 
 export function MemeCard({ meme, featuredBadge, onReactionUpdate }: Props) {
   const { data: session } = useSession();
-  const [localReactions, setLocalReactions] = useState(meme.reactions || {
-    likes: 0,
-    laughs: 0,
-    wows: 0,
-    sads: 0,
-    dislikes: 0,
-  });
-  const [isLiked, setIsLiked] = useState(meme.isLiked || false);
+
+  const [reactions, setReactions] = useState(
+    meme.reactions || {
+      likes: 0,
+      laughs: 0,
+      wows: 0,
+      sads: 0,
+      dislikes: 0,
+    }
+  );
+
+  // we only know about likes from backend, so use that as initial active reaction
+  const [activeReaction, setActiveReaction] = useState<ReactionKey | null>(
+    meme.isLiked ? "likes" : null
+  );
   const [isReacting, setIsReacting] = useState(false);
 
   const href = `/meme/${meme._id}`;
   const imageUrl = meme.memeUrl || meme.imageUrl;
 
-  const handleLike = async (e: React.MouseEvent) => {
-    e.preventDefault();
+  const totalReactions =
+    (reactions.likes || 0) +
+    (reactions.laughs || 0) +
+    (reactions.wows || 0) +
+    (reactions.sads || 0) +
+    (reactions.dislikes || 0);
+
+  const sendReaction = async (
+    type: ReactionKey,
+    nextActive: ReactionKey | null
+  ) => {
+    try {
+      const res = await fetch(`/api/memes/${meme._id}/react`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reactionType: type }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reactions) {
+          setReactions(data.reactions);
+          // if backend sends userReaction, prefer that
+          if (data.userReaction) {
+            setActiveReaction(data.userReaction as ReactionKey);
+            onReactionUpdate?.(meme._id, data.reactions, data.userReaction);
+          } else {
+            setActiveReaction(nextActive);
+            onReactionUpdate?.(meme._id, data.reactions, nextActive);
+          }
+        } else {
+          setActiveReaction(nextActive);
+        }
+      } else {
+        // on failure we just refetch reactions on next load
+        setActiveReaction(nextActive);
+      }
+    } catch (err) {
+      console.error("Failed to react", err);
+      setActiveReaction(nextActive);
+    } finally {
+      setIsReacting(false);
+    }
+  };
+
+  const handleReactionClick = async (
+    e: MouseEvent<HTMLButtonElement | SVGSVGElement>,
+    type: ReactionKey
+  ) => {
     e.stopPropagation();
-    
+
     if (!session) {
-      alert("Please login to like");
+      alert("Please login to react");
       return;
     }
 
     if (isReacting) return;
     setIsReacting(true);
 
-    // Optimistic update
-    const newIsLiked = !isLiked;
-    const newLikes = newIsLiked ? (localReactions.likes || 0) + 1 : Math.max(0, (localReactions.likes || 0) - 1);
-    
-    setIsLiked(newIsLiked);
-    setLocalReactions((prev) => ({
-      ...prev,
-      likes: newLikes,
-    }));
+    // optimistic update
+    setReactions((prev) => {
+      const next = { ...prev };
 
-    try {
-      const res = await fetch(`/api/memes/${meme._id}/react`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reactionType: "likes" }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.reactions) {
-          setLocalReactions(data.reactions);
-          setIsLiked(data.isLiked);
-          if (onReactionUpdate) {
-            onReactionUpdate(meme._id, data.reactions, data.isLiked);
-          }
-        }
-      } else {
-        // Revert optimistic update on error
-        setIsLiked(!newIsLiked);
-        setLocalReactions((prev) => ({
-          ...prev,
-          likes: localReactions.likes || 0,
-        }));
+      // remove previous reaction
+      if (activeReaction && activeReaction !== type) {
+        next[activeReaction] = Math.max(0, (next[activeReaction] || 0) - 1);
       }
-    } catch (error) {
-      console.error("Failed to react", error);
-      // Revert optimistic update on error
-      setIsLiked(!newIsLiked);
-      setLocalReactions((prev) => ({
-        ...prev,
-        likes: localReactions.likes || 0,
-      }));
-    } finally {
-      setIsReacting(false);
-    }
+
+      // toggle current
+      if (activeReaction === type) {
+        next[type] = Math.max(0, (next[type] || 0) - 1);
+      } else {
+        next[type] = (next[type] || 0) + 1;
+      }
+
+      return next;
+    });
+
+    const nextActive = activeReaction === type ? null : type;
+    await sendReaction(type, nextActive);
   };
 
+  const iconClasses = (type: ReactionKey) =>
+    `h-3.5 w-3.5 ${
+      activeReaction === type ? "text-emerald-400" : "text-slate-400"
+    }`;
+
+  const pillClasses = (type: ReactionKey) =>
+    `flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition-all ${
+      activeReaction === type
+        ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
+        : "border-slate-700 bg-slate-900/70 text-slate-300 hover:bg-slate-800/80"
+    }`;
+
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-card/80 hover:scale-[1.02] transition-all duration-300 shadow-xl shadow-black/30 hover:shadow-2xl hover:shadow-primary/30 group">
+    <div className="relative">
       {featuredBadge && (
-        <span className="absolute top-3 left-3 z-30 px-3 py-1 rounded-full bg-primary text-primary-foreground text-xs font-semibold shadow-lg backdrop-blur-sm">
+        <span className="absolute z-20 top-3 left-3 rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-950 shadow-lg">
           {featuredBadge}
         </span>
       )}
-      
-      {/* Clickable Image Section */}
-      <Link href={href} className="block relative">
-        <div className="aspect-square overflow-hidden bg-muted relative cursor-pointer">
-          {meme.mediaType === "video" ? (
-            <video
-              src={meme.videoUrl || imageUrl}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-              muted
-              loop
-              playsInline
-              onError={(e) => {
-                const target = e.target as HTMLVideoElement;
-                target.style.display = "none";
-              }}
-            />
-          ) : (
-            <img
-              src={imageUrl}
-              alt={meme.title}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-              loading="lazy"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect fill='%23333' width='400' height='400'/%3E%3Ctext fill='%23999' font-family='sans-serif' font-size='18' x='50%25' y='50%25' text-anchor='middle' dy='.3em'%3EImage not available%3C/text%3E%3C/svg%3E";
-              }}
-            />
-          )}
-          {/* Gradient overlay on hover */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        </div>
-      </Link>
-      
-      {/* Card Info Section - Not clickable */}
-      <div className="p-4 bg-card/95 backdrop-blur-sm space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="font-semibold text-foreground line-clamp-2 flex-1">{meme.title}</h3>
-          <span className="px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground whitespace-nowrap">
-            {meme.category}
-          </span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className={`flex items-center gap-2 text-sm font-semibold ${isLiked ? "text-primary" : "text-muted-foreground"}`}>
-            <ThumbsUp className={`h-4 w-4 ${isLiked ? "fill-primary text-primary" : ""}`} />
-            <span>{localReactions.likes || 0} {localReactions.likes === 1 ? "like" : "likes"}</span>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/70 shadow-[0_18px_45px_rgba(0,0,0,0.6)] hover:shadow-[0_22px_60px_rgba(16,185,129,0.35)] transition-all duration-300 hover:scale-[1.03]">
+        {/* Only IMAGE is clickable */}
+        <Link href={href} className="block">
+          <div className="aspect-square overflow-hidden bg-slate-900">
+            {meme.mediaType === "video" ? (
+              <video
+                src={meme.videoUrl || imageUrl}
+                className="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
+                muted
+                loop
+                playsInline
+              />
+            ) : (
+              <img
+                src={imageUrl}
+                alt={meme.title}
+                className="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
+                loading="lazy"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src =
+                    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect fill='%2308181f' width='400' height='400'/%3E%3Ctext fill='%236b7280' font-family='system-ui' font-size='16' x='50%25' y='50%25' text-anchor='middle' dy='.3em'%3EImage not available%3C/text%3E%3C/svg%3E";
+                }}
+              />
+            )}
+          </div>
+        </Link>
+
+        {/* Info + reactions (not clickable for navigation) */}
+        <div className="space-y-3 px-4 py-4 bg-gradient-to-b from-slate-950/90 to-slate-900/80">
+          <div className="mb-1 flex items-start justify-between gap-2">
+            <h3 className="flex-1 text-sm font-semibold text-slate-50 line-clamp-2">
+              {meme.title}
+            </h3>
+            <span className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+              {meme.category}
+            </span>
           </div>
 
-          <button
-            onClick={handleLike}
-            disabled={isReacting}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 border transition-all text-sm font-semibold disabled:opacity-60 ${
-              isLiked
-                ? "bg-primary/20 border-primary/40 text-primary hover:bg-primary/30"
-                : "bg-slate-900/70 border-white/10 text-white hover:bg-white/10"
-            }`}
-            title={isLiked ? "Unlike" : "Like"}
-          >
-            <ThumbsUp className={`h-4 w-4 ${isLiked ? "fill-primary text-primary" : ""}`} />
-            {isLiked ? "Unlike" : "Like"}
-          </button>
+          <div className="flex mt-2 items-center justify-between gap-2 text-[11px]">
+            {/* clickable reactions */}
+            <div className="flex flex-wrap gap-2 text-slate-300">
+              <button
+                type="button"
+                className={pillClasses("likes")}
+                onClick={(e) => handleReactionClick(e, "likes")}
+                disabled={isReacting}
+              >
+                <ThumbsUp className={iconClasses("likes")} />
+                {reactions.likes || 0}
+              </button>
+
+              <button
+                type="button"
+                className={pillClasses("laughs")}
+                onClick={(e) => handleReactionClick(e, "laughs")}
+                disabled={isReacting}
+              >
+                <Laugh className={iconClasses("laughs")} />
+                {reactions.laughs || 0}
+              </button>
+            </div>
+
+            <div className="flex flex-col items-end gap-1 text-[11px] text-slate-400">
+              <button
+                type="button"
+                className={pillClasses("wows")}
+                onClick={(e) => handleReactionClick(e, "wows")}
+                disabled={isReacting}
+              >
+                <Eye className={iconClasses("wows")} />
+                {reactions.wows || 0}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
