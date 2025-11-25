@@ -6,45 +6,93 @@ import { MemeCard } from "@/components/MemeCard";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 import { Flame, Sparkles } from "lucide-react";
-import { placeholderMemes } from "@/data/placeholders";
-import type { UIMeme } from "@/types/meme";
+import type { TemplateCardData } from "@/types/template";
+import {
+  fetchAllMemes,
+  selectAllMemes,
+  selectMemesGroupedByCategory,
+  selectMemesStatus,
+  selectTrendingMemes,
+} from "@/features/memes/memesSlice";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 export default function Home() {
   const { data: session } = useSession();
-  const [trendingMemes, setTrendingMemes] =
-    useState<UIMeme[]>(placeholderMemes);
-  const [latestMemes, setLatestMemes] = useState<UIMeme[]>(
-    placeholderMemes.slice().reverse()
-  );
-
-  const highlights = useMemo(
-    () => [
-      { label: "Total Reactions", value: "12", icon: Sparkles },
-      { label: "Total Memes", value: "2", icon: Flame },
-      { label: "Creators Online", value: "128+", icon: Sparkles },
-    ],
-    []
-  );
+  const dispatch = useAppDispatch();
+  const status = useAppSelector(selectMemesStatus);
+  const trendingMemes = useAppSelector(selectTrendingMemes);
+  const allMemes = useAppSelector(selectAllMemes);
+  const groupedByCategory = useAppSelector(selectMemesGroupedByCategory);
+  const [featuredTemplates, setFeaturedTemplates] = useState<TemplateCardData[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/memes/trending")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length) {
-          setTrendingMemes(data);
-        }
-      })
-      .catch(() => setTrendingMemes(placeholderMemes));
+    if (status === "idle") {
+      dispatch(fetchAllMemes());
+    }
+  }, [dispatch, status]);
 
-    fetch("/api/memes")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length) {
-          setLatestMemes(data);
+  useEffect(() => {
+    let ignore = false;
+    const fetchTemplates = async () => {
+      try {
+        const res = await fetch("/api/templates");
+        if (!res.ok) return;
+        const data: TemplateCardData[] = await res.json();
+        if (!ignore && Array.isArray(data)) {
+          setFeaturedTemplates(data.slice(0, 3));
         }
-      })
-      .catch(() => setLatestMemes(placeholderMemes.slice().reverse()));
+      } catch (error) {
+        console.error("Failed to load templates", error);
+      } finally {
+        if (!ignore) setTemplatesLoading(false);
+      }
+    };
+    fetchTemplates();
+    return () => {
+      ignore = true;
+    };
   }, []);
+
+  const latestMemes = useMemo(
+    () =>
+      [...allMemes]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt ?? "").getTime() -
+            new Date(a.createdAt ?? "").getTime()
+        )
+        .slice(0, 8),
+    [allMemes]
+  );
+
+  const highlights = useMemo(() => {
+    const totalReactions = allMemes.reduce((acc, meme) => {
+      const reactionSum = Object.values(meme.reactions ?? {}).reduce(
+        (sum, value) => sum + (value ?? 0),
+        0
+      );
+      return acc + reactionSum;
+    }, 0);
+
+    return [
+      {
+        label: "Total Reactions",
+        value: totalReactions.toString(),
+        icon: Sparkles,
+      },
+      { label: "Total Memes", value: allMemes.length.toString(), icon: Flame },
+      { label: "Creators Online", value: "Live", icon: Sparkles },
+    ];
+  }, [allMemes]);
+
+  const categoryEntries = useMemo(
+    () =>
+      Object.entries(groupedByCategory).sort(
+        (a, b) => b[1].length - a[1].length
+      ),
+    [groupedByCategory]
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 pb-16 pt-10">
@@ -115,15 +163,23 @@ export default function Home() {
             View leaderboard →
           </Link>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {trendingMemes.slice(0, 8).map((meme, idx) => (
-            <MemeCard
-              key={`${meme._id}-${idx}`}
-              meme={meme}
-              featuredBadge={idx < 2 ? `#${idx + 1} Trending` : undefined}
-            />
-          ))}
-        </div>
+        {status === "loading" ? (
+          <p className="text-center text-slate-400">Loading trending memes...</p>
+        ) : trendingMemes.length ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {trendingMemes.map((meme, idx) => (
+              <MemeCard
+                key={`${meme._id}-${idx}`}
+                meme={meme}
+                featuredBadge={idx < 2 ? `#${idx + 1} Trending` : undefined}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-slate-400">
+            No trending memes yet. Be the first to upload!
+          </p>
+        )}
       </section>
 
       <section className="mt-20 space-y-6">
@@ -136,37 +192,150 @@ export default function Home() {
             New uploads from the community. React before they trend!
           </p>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {latestMemes.slice(0, 8).map((meme, idx) => (
-            <MemeCard
-              key={`${meme._id}-latest-${idx}`}
-              meme={meme}
-              featuredBadge={idx === 0 ? "New" : undefined}
-            />
-          ))}
-        </div>
+        {status === "loading" ? (
+          <p className="text-center text-slate-400">Fetching latest memes...</p>
+        ) : latestMemes.length ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {latestMemes.map((meme, idx) => (
+              <MemeCard
+                key={`${meme._id}-latest-${idx}`}
+                meme={meme}
+                featuredBadge={idx === 0 ? "New" : undefined}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-slate-400">
+            Upload your first meme to light up the feed.
+          </p>
+        )}
       </section>
 
-      <section className="mt-20 rounded-3xl border border-primary/20 bg-gradient-to-r from-primary/20 via-slate-900 to-primary/10 p-8 text-center shadow-glow">
-        <p className="text-sm uppercase tracking-[0.4em] text-slate-900">
-          Ready to create?
-        </p>
-        <h3 className="mt-4 text-3xl font-bold text-slate-900">
-          Browse templates & craft your story
-        </h3>
-        <div className="mt-6 flex flex-wrap justify-center gap-4">
-          <Link
-            href="/templates"
-            className="rounded-2xl bg-slate-900 px-6 py-3 font-semibold text-white"
-          >
-            Use a Template
-          </Link>
-          <Link
-            href="/upload"
-            className="rounded-2xl border border-slate-900 px-6 py-3 font-semibold text-slate-900"
-          >
-            Upload Now
-          </Link>
+      <section className="mt-20 space-y-6">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm uppercase tracking-[0.4em] text-slate-400">
+            🗂️ Categories
+          </p>
+          <h3 className="text-3xl font-bold text-white">
+            Browse by your favourite vibe
+          </h3>
+          <p className="text-slate-400">
+            We automatically group every upload by category so you can dive
+            straight into the mood you want.
+          </p>
+        </div>
+        {status === "loading" ? (
+          <p className="text-center text-slate-400">Loading categories...</p>
+        ) : categoryEntries.length ? (
+          <div className="space-y-10">
+            {categoryEntries.slice(0, 4).map(([category, memes]) => (
+              <div key={category} className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-2xl font-semibold text-white">
+                    {category}
+                  </h4>
+                  <Link
+                    href={`/explore?category=${encodeURIComponent(category)}`}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    See all
+                  </Link>
+                </div>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                  {memes.slice(0, 4).map((meme) => (
+                    <MemeCard key={meme._id} meme={meme} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-slate-400">
+            No categories to show yet. Upload a meme to start!
+          </p>
+        )}
+      </section>
+
+      <section className="mt-20">
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-slate-900/80 to-black p-10 shadow-[0_25px_60px_rgba(0,0,0,0.45)]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.25),transparent_45%)] opacity-70" />
+          <div className="relative z-10">
+            <p className="text-sm uppercase tracking-[0.4em] text-primary">
+              Templates Hub
+            </p>
+            <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-2">
+                <h3 className="text-3xl font-bold text-white">
+                  Browse templates & craft your story
+                </h3>
+                <p className="text-slate-400 max-w-2xl">
+                  Kickstart your next meme with community favorite templates. Tap a card to jump into the uploader with the template ready to go.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href="/templates"
+                  className="rounded-2xl bg-primary px-6 py-3 font-semibold text-slate-950 hover:bg-primary/90 transition"
+                >
+                  Browse Templates
+                </Link>
+                <Link
+                  href="/upload"
+                  className="rounded-2xl border border-white/20 px-6 py-3 font-semibold text-white hover:bg-white/10 transition"
+                >
+                  Upload Now
+                </Link>
+              </div>
+            </div>
+
+            <div className="mt-10">
+              {templatesLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                </div>
+              ) : featuredTemplates.length ? (
+                <div className="grid gap-6 md:grid-cols-3">
+                  {featuredTemplates.map((template) => (
+                    <div
+                      key={template._id}
+                      className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md overflow-hidden shadow-xl shadow-black/40 hover:shadow-2xl hover:border-primary/40 transition-all"
+                    >
+                      <div className="aspect-video overflow-hidden bg-black/40">
+                        <img
+                          src={template.imageUrl}
+                          alt={template.name}
+                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-110"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src =
+                              "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='225'%3E%3Crect fill='%23111' width='400' height='225'/%3E%3Ctext fill='%23fff' font-family='sans-serif' font-size='18' x='50%25' y='50%25' text-anchor='middle' dy='.3em'%3ETemplate%3C/text%3E%3C/svg%3E";
+                          }}
+                        />
+                      </div>
+                      <div className="p-4 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-white font-semibold">{template.name}</p>
+                          <p className="text-xs text-slate-400 uppercase tracking-wide">
+                            {template.category}
+                          </p>
+                        </div>
+                        <Link
+                          href="/upload"
+                          className="rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-primary hover:text-slate-900 transition"
+                        >
+                          Use
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  No templates yet. Head over to the templates page to add the first one!
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
     </div>

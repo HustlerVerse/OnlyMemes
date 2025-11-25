@@ -16,12 +16,23 @@ export function ReactionBar({ memeId, reactions }: Props) {
   const [localReactions, setLocalReactions] = useState(reactions);
 
   const handleReact = async (type: keyof typeof reactions) => {
-    await fetch(`/api/memes/${memeId}/react`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type }),
-    });
-    setLocalReactions((prev) => ({ ...prev, [type]: prev[type] + 1 }));
+    try {
+      const res = await fetch(`/api/memes/${memeId}/react`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reactionType: type }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reactions) {
+          setLocalReactions(data.reactions);
+        } else {
+          setLocalReactions((prev) => ({ ...prev, [type]: prev[type] + 1 }));
+        }
+      }
+    } catch (error) {
+      console.error("Failed to react", error);
+    }
   };
 
   return (

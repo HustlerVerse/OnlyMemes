@@ -4,11 +4,14 @@ import { connectToDB } from "@/lib/db";
 import { Meme } from "@/models/Meme";
 import { auth } from "@/app/api/auth/[...nextauth]/route";
 
-export async function GET() {
+type RouteContext = {
+  params: Promise<{ category: string }>;
+};
+
+export async function GET(_: Request, context: RouteContext) {
   await connectToDB();
-  const memes = await Meme.find()
-    .sort({ views: -1, "reactions.likes": -1, createdAt: -1 })
-    .limit(24);
+  const { category } = await context.params;
+  const memes = await Meme.find({ category }).sort({ createdAt: -1 }).limit(20);
 
   // Check if current user has liked each meme
   const session = await auth();
@@ -33,3 +36,4 @@ export async function GET() {
 
   return NextResponse.json(memesWithLikedStatus);
 }
+
