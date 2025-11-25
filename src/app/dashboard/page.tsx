@@ -12,6 +12,7 @@ import { Sparkles, ThumbsUp, Flame } from "lucide-react";
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
+
   const [memes, setMemes] = useState<UIMeme[]>(placeholderMemes.slice(0, 2));
   const [suggestions, setSuggestions] = useState<string[]>([
     "Drop your next Hustlerverse update.",
@@ -19,21 +20,28 @@ export default function Dashboard() {
     "Remix a trending template.",
   ]);
 
+  // Loading state
   if (status === "loading") return <p>Loading...</p>;
+
+  // If no session → redirect
   if (!session) {
     router.push("/auth");
     return null;
   }
 
+  // SAFE fetch after session exists
   useEffect(() => {
+    if (!session?.user?.id) return; // prevent TypeScript build error
+
     fetch(`/api/memes?ownerId=${session.user.id}`)
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data) && data.length) {
+        if (Array.isArray(data) && data.length > 0) {
           setMemes(data);
         }
       })
       .catch(() => setMemes(placeholderMemes.slice(0, 2)));
+
     fetch("/api/suggestions")
       .then((res) => res.json())
       .then((data) => {
@@ -42,7 +50,7 @@ export default function Dashboard() {
         }
       })
       .catch(() => {});
-  }, [session]);
+  }, [session?.user?.id]);
 
   const totalReactions = memes.reduce(
     (acc, m) => acc + Object.values(m.reactions).reduce((a, b) => a + b, 0),
@@ -79,6 +87,8 @@ export default function Dashboard() {
         </p>
         <h1 className="text-4xl font-bold">Creator Dashboard</h1>
       </div>
+
+      {/* Stats */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-8">
         {statCards.map(({ label, value, icon: Icon }) => (
           <div
@@ -93,12 +103,16 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* My Memes */}
       <h2 className="text-2xl font-bold mb-4">My Memes</h2>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {memes.slice(0, 8).map((meme) => (
           <MemeCard key={meme._id} meme={meme} showEditDelete />
         ))}
       </div>
+
+      {/* Suggestions */}
       <h2 className="text-2xl font-bold mt-12 mb-4">Meme Suggestions</h2>
       <ul className="grid gap-3 md:grid-cols-3">
         {suggestions.slice(0, 3).map((sug, i) => (
